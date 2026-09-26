@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DrywallMath - honest drywall math</title>
+<style>
+  :root { --bg:#15140f; --card:#201d15; --ink:#f2efe6; --dim:#b0a88e; --acc:#c9b458; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { padding:28px 24px 8px; max-width:980px; margin:0 auto; display:flex; justify-content:space-between; align-items:baseline; }
+  h1 { margin:0; font-size:28px; }
+  h1 span { color:var(--acc); }
+  nav a { color:var(--dim); text-decoration:none; font-size:14px; }
+  main { max-width:980px; margin:0 auto; padding:16px 24px 60px; display:grid; gap:18px; }
+  .card { background:var(--card); border-radius:14px; padding:20px; }
+  .card h2 { margin:0 0 12px; font-size:13px; letter-spacing:1.5px; color:var(--dim); text-transform:uppercase; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:14px; }
+  label { display:block; font-size:13px; color:var(--dim); margin-bottom:4px; }
+  input, select { width:100%; background:#171510; border:1px solid #4d4732; color:var(--ink); border-radius:8px; padding:9px 10px; font-size:15px; }
+  .hint { font-size:12.5px; color:var(--dim); margin-top:10px; }
+  button { cursor:pointer; border:0; border-radius:9px; padding:11px 16px; font-size:15px; background:var(--acc); color:#26210c; font-weight:600; }
+  button.ghost { background:#3b3725; color:var(--ink); font-weight:500; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }
+  .verdict { font-size:17px; line-height:1.65; }
+  .verdict b { color:var(--acc); }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-top:16px; }
+  .stat { background:#171510; border-radius:10px; padding:12px; }
+  .stat .v { font-size:19px; font-weight:700; color:var(--acc); }
+  .stat .k { font-size:12px; color:var(--dim); margin-top:2px; }
+  .note { margin-top:14px; font-size:13.5px; color:var(--dim); }
+  .note b { color:var(--acc); font-weight:600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Drywall<span>Math</span></h1>
+  <nav><a href="index.html">home</a></nav>
+</header>
+<main>
+  <section class="card">
+    <h2>The job</h2>
+    <div class="grid">
+      <div><label>Gross board area (sq ft)</label><input id="gross" type="number" value="600"></div>
+      <div><label>Doors + windows (sq ft)</label><input id="openings" type="number" value="40"></div>
+      <div><label>Sheet size</label><select id="size">
+        <option value="4x8" selected>4x8 (one person)</option>
+        <option value="4x12">4x12 (fewer seams, two people)</option>
+      </select></div>
+      <div><label>Outside corners (linear ft)</label><input id="corners" type="number" value="0"></div>
+      <div><label>Sheet price</label><input id="sheetPrice" type="number" step="0.01" value="14"></div>
+    </div>
+    <p class="hint">Openings come out, then 10% waste goes back on - the broken corner always happens on the last sheet, after the store closes.</p>
+    <div class="row">
+      <button id="run">Price the honest cart</button>
+      <button class="ghost" data-preset="garage">garage finish</button>
+      <button class="ghost" data-preset="basement">basement room</button>
+      <button class="ghost" data-preset="reno">the whole reno</button>
+    </div>
+  </section>
+
+  <section class="card" id="result" hidden>
+    <h2>The cart</h2>
+    <p class="verdict" id="verdictText"></p>
+    <div class="stats" id="stats"></div>
+    <p class="note" id="advice"></p>
+  </section>
+
+  <section class="card">
+    <h2>Mud is the calendar</h2>
+    <p class="note">Sheets go up in a day; <b>mud takes a week</b>. Three honest coats, a dry day each, sand between - a three-bucket job is a week of evenings, not a weekend. Seams are the whole game: <b>4x12 sheets cut a quarter of them</b>, and every seam is three coats. Hang horizontal, stagger the joints, and mud outside corners <b>wide</b> - the hallway corner is what every guest touches.</p>
+  </section>
+</main>
+<script src="engine.js"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var money = function (x) { return '$' + x.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+
+  var PRESETS = {
+    garage: { gross: 600, openings: 40, size: '4x8', corners: 0 },
+    basement: { gross: 450, openings: 21, size: '4x8', corners: 8 },
+    reno: { gross: 2000, openings: 100, size: '4x8', corners: 24 }
+  };
+  document.querySelectorAll('[data-preset]').forEach(function (b) {
+    b.onclick = function () {
+      var p = PRESETS[b.dataset.preset];
+      Object.keys(p).forEach(function (k) { $(k).value = p[k]; });
+      run();
+    };
+  });
+
+  function run() {
+    var gross = +$('gross').value || 0;
+    if (gross <= 0) { alert('Enter a board area.'); return; }
+    var est = DrywallMath.estimate({
+      grossSqFt: gross, openingsSqFt: +$('openings').value || 0,
+      sheetSize: $('size').value, cornerFt: +$('corners').value || 0,
+      sheetPrice: +$('sheetPrice').value || 14
+    });
+
+    $('verdictText').innerHTML = est.netSqFt + ' net sq ft with waste is <b>' + est.sheets + ' sheets of ' +
+      est.sheetSize + '</b>, ' + est.tapeRolls + ' roll' + (est.tapeRolls > 1 ? 's' : '') + ' of tape, ' +
+      est.mudBuckets + ' bucket' + (est.mudBuckets > 1 ? 's' : '') + ' of mud and ' + est.screwLbs +
+      ' lb of screws' + (est.beadSticks ? ', plus ' + est.beadSticks + ' sticks of corner bead' : '') +
+      ' - <b>' + money(est.total) + '</b> before the sandpaper and the swear jar.';
+
+    var stats = [
+      { v: est.sheets, k: est.sheetSize + ' sheets (10% waste in)' },
+      { v: est.tapeRolls, k: 'tape rolls (500 ft)' },
+      { v: est.mudBuckets, k: 'mud buckets (3 coats)' },
+      { v: est.screwLbs + ' lb', k: 'screws' },
+      { v: est.beadSticks, k: 'corner bead sticks' },
+      { v: money(est.total), k: 'materials total' }
+    ];
+    $('stats').innerHTML = stats.map(function (x) {
+      return '<div class="stat"><div class="v">' + x.v + '</div><div class="k">' + x.k + '</div></div>';
+    }).join('');
+
+    $('advice').innerHTML = DrywallMath.advice(est);
+    $('result').hidden = false;
+    $('result').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  $('run').onclick = run;
+})();
+</script>
+</body>
+</html>
